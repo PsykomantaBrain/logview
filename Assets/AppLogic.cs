@@ -66,32 +66,33 @@ public class AppLogic : MonoBehaviour
 
 				// parse log entries 
 
+				// regexes for things unity adds to the log and annoyingly doesn't annotate in any way
+
 				// shader errors and warnings are thankfully prefixed			
-				if (Regex.IsMatch(lines[i], @"ERROR:"))
+
+				if (Regex.IsMatch(lines[i], @"ERROR:")
+					|| Regex.IsMatch(lines[i], @"^Crash!!!"))
 				{
 					logview.AddLog(lines[i], string.Empty, LogType.Error);
 					entrystart = i + 1;
 				}
-				else if (Regex.IsMatch(lines[i], @"WARNING:"))
+				else if (Regex.IsMatch(lines[i], @"WARNING:")
+					  || Regex.IsMatch(lines[i], @"^Fallback handler")
+					  || Regex.IsMatch(lines[i], @"^[Dd]3[Dd]")
+					  || Regex.IsMatch(lines[i], @"^[uU]ploading [cC]rash [rR]eport"))
 				{
 					logview.AddLog(lines[i], string.Empty, LogType.Warning);
 					entrystart = i + 1;
 				}
-				// regexes for things unity adds to the log and annoyingly doesn't annotate in any way
 				else if (Regex.IsMatch(lines[i], @"^Unloading.+?[Uu]nused")
 					  || Regex.IsMatch(lines[i], @"^System Memory")
 					  || Regex.IsMatch(lines[i], @"^Total:.+?CreateObjectMapping")
 					  || Regex.IsMatch(lines[i], @"^UnloadTime:")
-					  || Regex.IsMatch(lines[i], @"^[uU]ploading [cC]rash [rR]eport")
+					  || Regex.IsMatch(lines[i], @"^Log:")
 					  || Regex.IsMatch(lines[i], @"^Setting up.+?threads for Enlighten")
 					  || Regex.IsMatch(lines[i], @"Thread -> id:"))
 				{
 					logview.AddLog(lines[i], string.Empty, LogType.Log);
-					entrystart = i + 1;
-				}
-				else if (Regex.IsMatch(lines[i], @"^Fallback handler"))
-				{
-					logview.AddLog(lines[i], string.Empty, LogType.Warning);
 					entrystart = i + 1;
 				}
 				else if (lines[i].StartsWith("(Filename:"))
