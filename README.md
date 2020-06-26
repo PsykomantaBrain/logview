@@ -34,4 +34,10 @@ Ideally, file parsing should happen on a separate thread, as logs can get quite 
 Feel free to fork this project and submit pull requests if you come up with additional features for it. :)
 
 
+## Attribution
+
+File drag and drop support by Markus Göbel (Bunny83), used under the MIT licence
+https://github.com/Bunny83/UnityWindowsFileDrag-Drop
+
+
 
