@@ -2160,7 +2160,7 @@ public class Reporter : MonoBehaviour
 	}
 
 	List<Log> threadedLogs = new List<Log>();
-	void CaptureLogThread(string condition, string stacktrace, LogType type)
+	private void CaptureLogThread(string condition, string stacktrace, LogType type)
 	{
 		Log log = new Log() { condition = condition, stacktrace = stacktrace, logType = (_LogType)type };
 		lock (threadedLogs)
@@ -2279,6 +2279,11 @@ public class Reporter : MonoBehaviour
 			fileContentsList.Add(logs[i].logType + "\n" + logs[i].condition + "\n" + logs[i].stacktrace);
 		}
 		File.WriteAllLines(filePath, fileContentsList.ToArray());
+	}
+
+	public void SuppressOwnLogs()
+	{
+		Application.logMessageReceivedThreaded -= CaptureLogThread;
 	}
 }
 

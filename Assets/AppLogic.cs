@@ -3,12 +3,15 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
+using System.Threading.Tasks;
 
 using UnityEngine;
 
@@ -17,11 +20,16 @@ public class AppLogic : MonoBehaviour
 	[SerializeField]
 	protected Reporter logview;
 
+	protected TcpClient client;
+
 
 	// Start is called before the first frame update
 	void Start()
 	{
 		logview.Show();
+
+		// no self-logging
+		logview.SuppressOwnLogs();
 
 		string[] args = Environment.GetCommandLineArgs();
 		if (args.Length > 1)
@@ -33,6 +41,13 @@ public class AppLogic : MonoBehaviour
 			else if (args.Length > 2)
 			{
 				// listen for the game remotely sending log data?
+
+				client = new TcpClient(args[1], int.Parse(args[2]));
+				client.ReceiveBufferSize = 65534;
+
+				Task.Run(() => ReceiverLoop(client.GetStream()));
+
+				return; // no file dropping in remote mode
 			}
 
 
@@ -42,6 +57,48 @@ public class AppLogic : MonoBehaviour
 
 
 	}
+
+	private async void ReceiverLoop(NetworkStream networkStream)
+	{
+		try
+		{
+			while (networkStream != null && networkStream.CanRead)
+			{
+				await Task.Delay(100);
+
+
+
+				byte[] rxBuffer = new byte[65534];
+				int nRead = 0;
+
+				// Incoming message may be larger than the buffer size.
+				do
+				{
+					nRead = networkStream.Read(rxBuffer, 0, rxBuffer.Length);
+				}
+				while (networkStream.DataAvailable);
+
+				DebugLogEntry e = DebugLogEntry.FromByteArray(rxBuffer, 0, nRead);
+				if (!e.IsNullOrEmpty())
+				{
+					LogEntry(e);
+				}
+				else
+				{
+					break;
+				}
+			}
+		}
+		finally
+		{
+			networkStream.Close();
+			client.Close();
+
+			Application.Quit();
+		}
+	}
+
+
 
 	private void OnFileDrop(List<string> aPathNames, POINT aDropPoint)
 	{
@@ -108,7 +165,7 @@ public class AppLogic : MonoBehaviour
 				}
 				else if (lines[i].StartsWith("(Filename:"))
 				{
-					Entry e = new Entry()
+					DebugLogEntry e = new DebugLogEntry()
 					{
 						header = lines[entrystart],
 						callstack = lines.Skip(entrystart + 1).Take(i - entrystart - 1).Aggregate(string.Empty, (txt, l) =>
@@ -127,14 +184,27 @@ public class AppLogic : MonoBehaviour
 		}
 	}
 
-	private void LogEntry(byte[] leData) => LogEntry(Entry.FromByteArray(leData));
+	private void LogEntry(byte[] leData) => LogEntry(DebugLogEntry.FromByteArray(leData, 0, leData.Length));
 
-	private void LogEntry(Entry e)
+	private void LogEntry(DebugLogEntry e)
 	{
-		if (e != null)
+		if (!e.IsNullOrEmpty())
 			logview.AddLog(e.header, e.callstack + "\n" + e.filename, e.logType);
 	}
 
+	public void OnDestroy()
+	{
+
+	}
+
+	public void OnApplicationQuit()
+	{
+		if (!Application.isEditor)
+		{
+			// workaround for the crash-on-exit problem https://answers.unity.com/questions/467030/unity-builds-crash-when-i-exit-1.html
+			System.Diagnostics.Process.GetCurrentProcess().Kill();
+		}
+	}
 
 }
 

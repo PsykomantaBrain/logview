@@ -1,21 +1,28 @@
 ﻿
 using System;
+using System.Text;
 using System.Text.RegularExpressions;
 
 using UnityEngine;
 
-public class Entry
+
+
+
+public struct DebugLogEntry
 {
 	public string header;
 	public string callstack;
 	public string filename;
 	public LogType logType;
 
+	public bool IsNullOrEmpty() => string.IsNullOrEmpty(header);
+
+
 	public byte[] ToByteArray()
 	{
-		byte[] headerBytes = Convert.FromBase64String(header);
-		byte[] callstackBytes = Convert.FromBase64String(callstack);
-		byte[] filenameBytes = Convert.FromBase64String(filename);
+		byte[] headerBytes = Encoding.UTF32.GetBytes(header);
+		byte[] callstackBytes = Encoding.UTF32.GetBytes(callstack);
+		byte[] filenameBytes = Encoding.UTF32.GetBytes(filename);
 
 		byte[] data = new byte[1 + 3 + headerBytes.Length + callstackBytes.Length + filenameBytes.Length];
 
@@ -40,29 +47,41 @@ public class Entry
 		return data;
 	}
 
-	public static Entry FromByteArray(byte[] data)
+	public static DebugLogEntry FromByteArray(byte[] data, int offset, int length)
 	{
-		if (data.Length < 4) return null;
+		if (data.Length < 4) return default;
 
-		Entry e = new Entry();
-		e.logType = (LogType)data[0];
-		if (data[1] > 0)
+		DebugLogEntry e = new DebugLogEntry();
+		e.logType = (LogType)data[offset];
+
+		byte sHeader = data[offset + 1];
+		byte sCallstack = data[offset + 2];
+		byte sFilename = data[offset + 3];
+
+		if (length < sHeader + sCallstack + sFilename + 4)
 		{
-			e.header = Convert.ToBase64String(data, 4, data[1]);
+			Debug.LogError($"[DebugLogEntry] invalid data. (data size doesn't match expected)");
+			return default;
 		}
-		if (data[2] > 0)
+
+		if (sHeader > 0)
 		{
-			e.callstack = Convert.ToBase64String(data, 4 + data[1], data[2]);
+			e.header = Encoding.UTF32.GetString(data, offset + 4, sHeader);
 		}
-		if (data[3] > 0)
+
+		if (data[offset + 2] > 0)
 		{
-			e.filename = Convert.ToBase64String(data, 4 + data[1] + data[2], data[3]);
+			e.callstack = Encoding.UTF32.GetString(data, offset + 4 + sHeader, sCallstack);
+		}
+		if (sFilename > 0)
+		{
+			e.filename = Encoding.UTF32.GetString(data, offset + 4 + sHeader + sCallstack, sFilename);
 		}
 
 		return e;
 	}
 
-	public Entry FigureOutLogType()
+	public DebugLogEntry FigureOutLogType()
 	{
 		logType = LogType.Log;
 
