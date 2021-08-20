@@ -1,10 +1,15 @@
 ﻿using B83.Win32;
+
 using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net;
+using System.Net.Sockets;
 using System.Text.RegularExpressions;
+using System.Threading;
+
 using UnityEngine;
 
 public class AppLogic : MonoBehaviour
@@ -18,9 +23,6 @@ public class AppLogic : MonoBehaviour
 	{
 		logview.Show();
 
-		B83.Win32.UnityDragAndDropHook.InstallHook();
-		B83.Win32.UnityDragAndDropHook.OnDroppedFiles += OnFileDrop;
-
 		string[] args = Environment.GetCommandLineArgs();
 		if (args.Length > 1)
 		{
@@ -28,7 +30,16 @@ public class AppLogic : MonoBehaviour
 			{
 				ShowLogFromFile(args[1]);
 			}
+			else if (args.Length > 2)
+			{
+				// listen for the game remotely sending log data?
+			}
+
+
+			B83.Win32.UnityDragAndDropHook.InstallHook();
+			B83.Win32.UnityDragAndDropHook.OnDroppedFiles += OnFileDrop;
 		}
+
 
 	}
 
@@ -106,8 +117,9 @@ public class AppLogic : MonoBehaviour
 							  return txt;
 						  }),
 						filename = lines[i]
-					};
+					}.FigureOutLogType();
 					entrystart = i + 1;
+
 
 					LogEntry(e);
 				}
@@ -115,42 +127,14 @@ public class AppLogic : MonoBehaviour
 		}
 	}
 
+	private void LogEntry(byte[] leData) => LogEntry(Entry.FromByteArray(leData));
+
 	private void LogEntry(Entry e)
 	{
-		LogType logType = LogType.Log;
-
-
-		if (Regex.IsMatch(e.header, @"^\S+?[eE]xception"))
-		{
-			logType = LogType.Exception;
-		}
-		else if (Regex.IsMatch(e.header, @"^The referenced script.+?is missing!"))
-		{
-			logType = LogType.Warning;
-		}
-		else if (!string.IsNullOrWhiteSpace(e.callstack))
-		{
-			if (e.callstack.Contains("UnityEngine.Debug:LogError("))
-			{
-				logType = LogType.Error;
-			}
-			else if (e.callstack.Contains("UnityEngine.Debug:LogWarning("))
-			{
-				logType = LogType.Warning;
-			}
-			else if (e.callstack.Contains("UnityEngine.Debug:LogAssertion("))
-			{
-				logType = LogType.Assert;
-			}
-		}
-
-		logview.AddLog(e.header, e.callstack + "\n" + e.filename, logType);
+		if (e != null)
+			logview.AddLog(e.header, e.callstack + "\n" + e.filename, e.logType);
 	}
-}
-public class Entry
-{
-	public string header;
-	public string callstack;
-	public string filename;
+
+
 }
 
