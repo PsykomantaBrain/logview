@@ -22,6 +22,9 @@ public class AppLogic : MonoBehaviour
 
 	protected TcpClient client;
 
+	[SerializeField]
+	protected string[] appArgs;
+
 
 	// Start is called before the first frame update
 	void Start()
@@ -29,9 +32,12 @@ public class AppLogic : MonoBehaviour
 		logview.Show();
 
 		// no self-logging
-		logview.SuppressOwnLogs();
+		//logview.SuppressOwnLogs();
 
-		string[] args = Environment.GetCommandLineArgs();
+		string[] args = Application.isPlayer
+			? Environment.GetCommandLineArgs()
+			: appArgs;
+
 		if (args.Length > 1)
 		{
 			if (File.Exists(args[1]))
@@ -43,9 +49,9 @@ public class AppLogic : MonoBehaviour
 				// listen for the game remotely sending log data?
 
 				client = new TcpClient(args[1], int.Parse(args[2]));
-				client.ReceiveBufferSize = 65534;
-
-				Task.Run(() => ReceiverLoop(client.GetStream()));
+				//client.ReceiveBufferSize = 32768;
+				enabled = true;
+				//Task.Run(() => ReceiverLoop(client.GetStream()));
 
 				return; // no file dropping in remote mode
 			}
@@ -55,47 +61,135 @@ public class AppLogic : MonoBehaviour
 			B83.Win32.UnityDragAndDropHook.OnDroppedFiles += OnFileDrop;
 		}
 
+		enabled = false;
+	}
 
+	NetworkStream netStream;
+	byte[] rxBuffer = new byte[32768];
+
+	public void Update()
+	{
+		if (client != null)
+		{
+			if (netStream == null)
+				netStream = client.GetStream();
+
+			if (netStream != null)
+			{
+				if (netStream.CanRead)
+				{
+					if (netStream.DataAvailable)
+					{
+						int nRead = 0;
+						// Incoming message may be larger than the buffer size.
+						do
+						{
+							nRead += netStream.Read(rxBuffer, 0, rxBuffer.Length);
+						}
+						while (netStream.DataAvailable);
+						try
+						{
+							DebugLogEntry e = DebugLogEntry.Read(new MemoryStream(rxBuffer, 0, nRead));
+							LogEntry(e);
+						}
+						//try
+						//{
+						//	DebugLogEntry e = DebugLogEntry.Read(netStream);
+						//	LogEntry(e);
+						//}
+						catch (Exception ex)
+						{
+							LogEntry(new DebugLogEntry()
+							{
+								header = "[Log Error]: " + ex.Message,
+								callstack = ex.StackTrace,
+								filename = ex.Source,
+								logType = LogType.Error
+							});
+						}
+					}
+				}
+				else
+				{
+					Terminate();
+				}
+			}
+			else
+			{
+				Terminate();
+			}
+		}
+	}
+
+	private void Terminate()
+	{
+		netStream.Close();
+		client.Close();
+
+		Application.Quit();
 	}
 
 	private async void ReceiverLoop(NetworkStream networkStream)
 	{
-		try
+		//try
+		//{
+		while (networkStream != null)
 		{
-			while (networkStream != null && networkStream.CanRead)
-			{
+			while (!networkStream.DataAvailable || !networkStream.CanRead)
 				await Task.Delay(100);
 
-
-
-				byte[] rxBuffer = new byte[65534];
-				int nRead = 0;
-
-				// Incoming message may be larger than the buffer size.
-				do
-				{
-					nRead = networkStream.Read(rxBuffer, 0, rxBuffer.Length);
-				}
-				while (networkStream.DataAvailable);
-
-				DebugLogEntry e = DebugLogEntry.FromByteArray(rxBuffer, 0, nRead);
-				if (!e.IsNullOrEmpty())
-				{
-					LogEntry(e);
-				}
-				else
-				{
-					break;
-				}
+			try
+			{
+				LogEntry(DebugLogEntry.Read(networkStream));
 			}
-		}
-		finally
-		{
-			networkStream.Close();
-			client.Close();
+			catch (Exception ex)
+			{
+				LogEntry(new DebugLogEntry()
+				{
+					header = "[Log Error]: " + ex.Message,
+					callstack = ex.StackTrace,
+					filename = ex.Source,
+					logType = LogType.Error
+				});
+			}
 
-			Application.Quit();
+			//byte[] rxBuffer = new byte[65534];
+			//int nRead = 0;
+			//// Incoming message may be larger than the buffer size.
+
+			//do
+			//{
+			//	nRead += networkStream.Read(rxBuffer, 0, rxBuffer.Length);
+			//}
+			//while (networkStream.DataAvailable);
+			//try
+			//{
+			//	DebugLogEntry e = DebugLogEntry.Read(new MemoryStream(rxBuffer, 0, nRead));
+			//	LogEntry(e);
+			//}
+			//catch (EndOfStreamException eos)
+			//{
+			//	UnityEngine.Debug.Log($"[AppLogic] Bad data received.");
+			//}
+
+			//networkStream.Flush();
+
+
+			//else
+			//{
+			//	break;
+			//}
 		}
+		//}
+		//finally
+		//{
+		//	networkStream.Close();
+		//	client.Close();
+
+		//	Application.Quit();
+		//}
+
+		UnityEngine.Debug.LogError($"[AppLogic] Receiver Loop Ended.");
 	}
 
 
@@ -184,9 +278,8 @@ public class AppLogic : MonoBehaviour
 		}
 	}
 
-	private void LogEntry(byte[] leData) => LogEntry(DebugLogEntry.FromByteArray(leData, 0, leData.Length));
 
-	private void LogEntry(DebugLogEntry e)
+	public void LogEntry(DebugLogEntry e)
 	{
 		if (!e.IsNullOrEmpty())
 			logview.AddLog(e.header, e.callstack + "\n" + e.filename, e.logType);

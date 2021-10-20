@@ -1,5 +1,6 @@
 ﻿
 using System;
+using System.IO;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -17,69 +18,63 @@ public struct DebugLogEntry
 
 	public bool IsNullOrEmpty() => string.IsNullOrEmpty(header);
 
-
-	public byte[] ToByteArray()
+	public DebugLogEntry Write(Stream stream)
 	{
-		byte[] headerBytes = Encoding.UTF32.GetBytes(header);
-		byte[] callstackBytes = Encoding.UTF32.GetBytes(callstack);
-		byte[] filenameBytes = Encoding.UTF32.GetBytes(filename);
-
-		byte[] data = new byte[1 + 3 + headerBytes.Length + callstackBytes.Length + filenameBytes.Length];
-
-		data[0] = (byte)logType;
-		data[1] = (byte)headerBytes.Length;
-		data[2] = (byte)callstackBytes.Length;
-		data[3] = (byte)filenameBytes.Length;
-
-		for (int i = 0; i < headerBytes.Length; i++)
+		using (BinaryWriter writer = new BinaryWriter(stream))
 		{
-			data[4 + i] = headerBytes[i];
-		}
-		for (int i = 0; i < callstackBytes.Length; i++)
-		{
-			data[4 + headerBytes.Length + i] = callstackBytes[i];
-		}
-		for (int i = 0; i < filenameBytes.Length; i++)
-		{
-			data[4 + headerBytes.Length + callstackBytes.Length + i] = filenameBytes[i];
-		}
+			byte[] bHeader = Encoding.UTF8.GetBytes(header);
+			byte[] bCallstack = Encoding.UTF8.GetBytes(callstack);
+			byte[] bFilename = Encoding.UTF8.GetBytes(filename);
+			int type = (int)logType;
 
-		return data;
+			writer.Write(type);
+
+			writer.Write(bHeader.Length);
+			writer.Write(bHeader);
+
+			writer.Write(bCallstack.Length);
+			writer.Write(bCallstack);
+
+			writer.Write(bFilename.Length);
+			writer.Write(bFilename);
+
+			writer.Close();
+		}
+		return this;
+	}
+	public static DebugLogEntry Read(Stream stream)
+	{
+		using (BinaryReader reader = new BinaryReader(stream))
+		{
+			DebugLogEntry e = new DebugLogEntry();
+
+			e.logType = (LogType)reader.ReadInt32();
+
+			int lHeader = reader.ReadInt32();
+			if (lHeader > 0)
+			{
+				byte[] bHeader = reader.ReadBytes(lHeader);
+				e.header = Encoding.UTF8.GetString(bHeader, 0, lHeader);
+			}
+			int lcallstack = reader.ReadInt32();
+			if (lcallstack > 0)
+			{
+				byte[] bcallstack = reader.ReadBytes(lcallstack);
+				e.callstack = Encoding.UTF8.GetString(bcallstack, 0, lcallstack);
+			}
+			int lfile = reader.ReadInt32();
+			if (lfile > 0)
+			{
+				byte[] bfile = reader.ReadBytes(lfile);
+				e.filename = Encoding.UTF8.GetString(bfile, 0, lfile);
+			}
+
+			reader.Close();
+
+			return e;
+		}
 	}
 
-	public static DebugLogEntry FromByteArray(byte[] data, int offset, int length)
-	{
-		if (data.Length < 4) return default;
-
-		DebugLogEntry e = new DebugLogEntry();
-		e.logType = (LogType)data[offset];
-
-		byte sHeader = data[offset + 1];
-		byte sCallstack = data[offset + 2];
-		byte sFilename = data[offset + 3];
-
-		if (length < sHeader + sCallstack + sFilename + 4)
-		{
-			Debug.LogError($"[DebugLogEntry] invalid data. (data size doesn't match expected)");
-			return default;
-		}
-
-		if (sHeader > 0)
-		{
-			e.header = Encoding.UTF32.GetString(data, offset + 4, sHeader);
-		}
-
-		if (data[offset + 2] > 0)
-		{
-			e.callstack = Encoding.UTF32.GetString(data, offset + 4 + sHeader, sCallstack);
-		}
-		if (sFilename > 0)
-		{
-			e.filename = Encoding.UTF32.GetString(data, offset + 4 + sHeader + sCallstack, sFilename);
-		}
-
-		return e;
-	}
 
 	public DebugLogEntry FigureOutLogType()
 	{

@@ -422,7 +422,7 @@ public class Reporter : MonoBehaviour
 		showWarning = (PlayerPrefs.GetInt("Reporter_showWarning", 1) == 1) ? true : false;
 		showError = (PlayerPrefs.GetInt("Reporter_showError", 1) == 1) ? true : false;
 		filterText = PlayerPrefs.GetString("Reporter_filterText");
-		size.x = size.y = PlayerPrefs.GetFloat("Reporter_size", 32);
+		size.x = size.y = PlayerPrefs.GetFloat("Reporter_size", 24);
 
 
 		showClearOnNewSceneLoadedButton = (PlayerPrefs.GetInt("Reporter_showClearOnNewSceneLoadedButton", 1) == 1) ? true : false;
@@ -2160,7 +2160,7 @@ public class Reporter : MonoBehaviour
 	}
 
 	List<Log> threadedLogs = new List<Log>();
-	private void CaptureLogThread(string condition, string stacktrace, LogType type)
+	void CaptureLogThread(string condition, string stacktrace, LogType type)
 	{
 		Log log = new Log() { condition = condition, stacktrace = stacktrace, logType = (_LogType)type };
 		lock (threadedLogs)
@@ -2279,11 +2279,6 @@ public class Reporter : MonoBehaviour
 			fileContentsList.Add(logs[i].logType + "\n" + logs[i].condition + "\n" + logs[i].stacktrace);
 		}
 		File.WriteAllLines(filePath, fileContentsList.ToArray());
-	}
-
-	public void SuppressOwnLogs()
-	{
-		Application.logMessageReceivedThreaded -= CaptureLogThread;
 	}
 }
 
